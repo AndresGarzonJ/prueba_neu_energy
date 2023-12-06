@@ -77,43 +77,45 @@ def calculate_energy_bill(session, month, year):
         )
 
         # Calculate EA
-        value_consumption = (
+        sum_value_consumption = (
             session.query(func.sum(Consumption.value))
             .join(Records, Consumption.id_record == Records.id_record)
             .filter(Records.id_service == id_service)
             .scalar()
         )
-        EA = value_consumption * tariffs.CU
+        EA = sum_value_consumption * tariffs.CU
 
         # Calculate EA
-        value_injection = (
+        sum_value_injection = (
             session.query(func.sum(Injection.value))
             .join(Records, Injection.id_record == Records.id_record)
             .filter(Records.id_service == id_service)
             .scalar()
         )
-        EC = value_injection * tariffs.C
+        EC = sum_value_injection * tariffs.C
 
         # Calculate EE1
         quantity_EE1 = 0
-        if value_injection <= value_consumption:
-            quantity_EE1 = value_injection
+        if sum_value_injection <= sum_value_consumption:
+            quantity_EE1 = sum_value_injection
         else:
-            quantity_EE1 = value_consumption
+            quantity_EE1 = sum_value_consumption
         EE1 = quantity_EE1 * tariffs.CU * -1
 
         # Calculate EE2
         quantity_EE2 = 0
-        if value_injection > value_consumption:
-            quantity_EE2 = value_consumption - value_injection
+        if sum_value_injection > sum_value_consumption:
+            quantity_EE2 = sum_value_consumption - sum_value_injection
 
-        # Obtain hourly injection data - records.record_timestamp, injection.value, xm_data_hourly_per_agent.value
-        hourly_injection = (
+        # Obtain hourly consumption data - records.record_timestamp, consumption.value, xm_data_hourly_per_agent.value
+        hourly_consumption = (
             session.query(
                 Records.record_timestamp,
+                func.sum(Consumption.value),
                 func.sum(Injection.value),
                 XmDataHourlyPerAgent.value,
             )
+            .join(Consumption, Records.id_record == Consumption.id_record)
             .join(Injection, Records.id_record == Injection.id_record)
             .join(
                 XmDataHourlyPerAgent,
@@ -129,13 +131,13 @@ def calculate_energy_bill(session, month, year):
             .all()
         )
 
-
         accumulated_sum = 0
         # Iterate over the data to find the time where the limit is exceeded.
-        for timestamp, injection_value, xm_data_hourly_per_agent_value in hourly_injection:
+        for timestamp, consumption_value, injection_value, xm_data_hourly_per_agent_value in hourly_consumption:
             accumulated_sum += injection_value
-            if accumulated_sum > EE1:
-                EE2 += quantity_EE2 * xm_data_hourly_per_agent_value
+            if accumulated_sum >  sum_value_consumption:
+                diff = accumulated_sum - injection_value
+                EE2 += quantity_EE2 * diff * xm_data_hourly_per_agent_value
             else:
                 # take the negative CU as the rate
                 EE2 += quantity_EE2 * tariffs.CU * - 1
