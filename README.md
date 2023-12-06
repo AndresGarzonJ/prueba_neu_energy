@@ -8,7 +8,7 @@
 # 1. Initial settings
 ## 1.1 Virtual Environment
 ##### 1. Navigate to the folder
-    cd prueba_neu_energy
+    cd test_neu_energy
 ##### 2. Create virtual environment
     virtualenv venv --python=python310
 ##### 3. Activate virtual environment
